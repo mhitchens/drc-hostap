@@ -226,10 +226,10 @@ void offchannel_send_action_tx_status(
 	}
 
 #ifdef CONFIG_P2P
-	if (wpa_s->p2p_long_listen > 0) {
+	if (wpa_s->global->p2p_long_listen > 0) {
 		/* Continue the listen */
 		wpa_printf(MSG_DEBUG, "P2P: Continuing long Listen state");
-		wpas_p2p_listen_start(wpa_s, wpa_s->p2p_long_listen);
+		wpas_p2p_listen_start(wpa_s, wpa_s->global->p2p_long_listen);
 	}
 #endif /* CONFIG_P2P */
 }
@@ -246,7 +246,7 @@ void offchannel_send_action_tx_status(
  * @buf: Frame to transmit starting from the Category field
  * @len: Length of @buf in bytes
  * @wait_time: Wait time for response in milliseconds
- * @tx_cb: Callback function for indicating TX status or %NULL for now callback
+ * @tx_cb: Callback function for indicating TX status or %NULL for no callback
  * @no_cck: Whether CCK rates are to be disallowed for TX rate selection
  * Returns: 0 on success or -1 on failure
  *
@@ -310,6 +310,8 @@ int offchannel_send_action(struct wpa_supplicant *wpa_s, unsigned int freq,
 
 		iface = wpas_get_tx_interface(wpa_s, src);
 		wpa_s->action_tx_wait_time = wait_time;
+		if (wait_time)
+			wpa_s->action_tx_wait_time_used = 1;
 
 		ret = wpa_drv_send_action(
 			iface, wpa_s->pending_action_freq,
@@ -398,13 +400,14 @@ void offchannel_send_action_done(struct wpa_supplicant *wpa_s)
 	wpabuf_free(wpa_s->pending_action_tx);
 	wpa_s->pending_action_tx = NULL;
 	if (wpa_s->drv_flags & WPA_DRIVER_FLAGS_OFFCHANNEL_TX &&
-	    wpa_s->action_tx_wait_time)
+	    (wpa_s->action_tx_wait_time || wpa_s->action_tx_wait_time_used))
 		wpa_drv_send_action_cancel_wait(wpa_s);
 	else if (wpa_s->off_channel_freq || wpa_s->roc_waiting_drv_freq) {
 		wpa_drv_cancel_remain_on_channel(wpa_s);
 		wpa_s->off_channel_freq = 0;
 		wpa_s->roc_waiting_drv_freq = 0;
 	}
+	wpa_s->action_tx_wait_time_used = 0;
 }
 
 

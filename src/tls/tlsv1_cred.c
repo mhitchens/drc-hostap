@@ -130,7 +130,7 @@ static int tlsv1_add_cert(struct x509_certificate **chain,
 			return -1;
 		}
 
-		der = base64_decode(pos, end - pos, &der_len);
+		der = base64_decode((const char *) pos, end - pos, &der_len);
 		if (der == NULL) {
 			wpa_printf(MSG_INFO, "TLSv1: Could not decode PEM "
 				   "certificate");
@@ -293,7 +293,7 @@ static struct crypto_private_key * tlsv1_set_key_pem(const u8 *key, size_t len)
 		}
 	}
 
-	der = base64_decode(pos, end - pos, &der_len);
+	der = base64_decode((const char *) pos, end - pos, &der_len);
 	if (!der)
 		return NULL;
 	pkey = crypto_private_key_import(der, der_len, NULL);
@@ -321,7 +321,7 @@ static struct crypto_private_key * tlsv1_set_key_enc_pem(const u8 *key,
 	if (!end)
 		return NULL;
 
-	der = base64_decode(pos, end - pos, &der_len);
+	der = base64_decode((const char *) pos, end - pos, &der_len);
 	if (!der)
 		return NULL;
 	pkey = crypto_private_key_import(der, der_len, passwd);
@@ -1166,10 +1166,9 @@ static int tlsv1_set_dhparams_der(struct tlsv1_credentials *cred,
 	if (hdr.length == 0)
 		return -1;
 	os_free(cred->dh_p);
-	cred->dh_p = os_malloc(hdr.length);
+	cred->dh_p = os_memdup(hdr.payload, hdr.length);
 	if (cred->dh_p == NULL)
 		return -1;
-	os_memcpy(cred->dh_p, hdr.payload, hdr.length);
 	cred->dh_p_len = hdr.length;
 	pos = hdr.payload + hdr.length;
 
@@ -1188,10 +1187,9 @@ static int tlsv1_set_dhparams_der(struct tlsv1_credentials *cred,
 	if (hdr.length == 0)
 		return -1;
 	os_free(cred->dh_g);
-	cred->dh_g = os_malloc(hdr.length);
+	cred->dh_g = os_memdup(hdr.payload, hdr.length);
 	if (cred->dh_g == NULL)
 		return -1;
-	os_memcpy(cred->dh_g, hdr.payload, hdr.length);
 	cred->dh_g_len = hdr.length;
 
 	return 0;
@@ -1227,7 +1225,7 @@ static int tlsv1_set_dhparams_blob(struct tlsv1_credentials *cred,
 		return -1;
 	}
 
-	der = base64_decode(pos, end - pos, &der_len);
+	der = base64_decode((const char *) pos, end - pos, &der_len);
 	if (der == NULL) {
 		wpa_printf(MSG_INFO, "TLSv1: Could not decode PEM dhparams");
 		return -1;

@@ -93,7 +93,7 @@ int bss_add_pmk_from_passphrase(struct wlantest_bss *bss,
 	if (pmk == NULL)
 		return -1;
 	if (pbkdf2_sha1(passphrase, bss->ssid, bss->ssid_len, 4096,
-			pmk->pmk, sizeof(pmk->pmk)) < 0) {
+			pmk->pmk, PMK_LEN) < 0) {
 		os_free(pmk);
 		return -1;
 	}
@@ -101,7 +101,7 @@ int bss_add_pmk_from_passphrase(struct wlantest_bss *bss,
 	wpa_printf(MSG_INFO, "Add possible PMK for BSSID " MACSTR
 		   " based on passphrase '%s'",
 		   MAC2STR(bss->bssid), passphrase);
-	wpa_hexdump(MSG_DEBUG, "Possible PMK", pmk->pmk, sizeof(pmk->pmk));
+	wpa_hexdump(MSG_DEBUG, "Possible PMK", pmk->pmk, PMK_LEN);
 	dl_list_add(&bss->pmk, &pmk->list);
 
 	return 0;
@@ -129,7 +129,7 @@ static void bss_add_pmk(struct wlantest *wt, struct wlantest_bss *bss)
 
 
 void bss_update(struct wlantest *wt, struct wlantest_bss *bss,
-		struct ieee802_11_elems *elems)
+		struct ieee802_11_elems *elems, int beacon)
 {
 	struct wpa_ie_data data;
 	int update = 0;
@@ -137,15 +137,18 @@ void bss_update(struct wlantest *wt, struct wlantest_bss *bss,
 	if (bss->capab_info != bss->prev_capab_info)
 		update = 1;
 
-	if (elems->ssid == NULL || elems->ssid_len > 32) {
-		wpa_printf(MSG_INFO, "Invalid or missing SSID in a Beacon "
-			   "frame for " MACSTR, MAC2STR(bss->bssid));
+	if (beacon && (!elems->ssid || elems->ssid_len > 32)) {
+		wpa_printf(MSG_INFO,
+			   "Invalid or missing SSID in a %s frame for " MACSTR,
+			   beacon == 1 ? "Beacon" : "Probe Response",
+			   MAC2STR(bss->bssid));
 		bss->parse_error_reported = 1;
 		return;
 	}
 
-	if (bss->ssid_len != elems->ssid_len ||
-	    os_memcmp(bss->ssid, elems->ssid, bss->ssid_len) != 0) {
+	if (beacon &&
+	    (bss->ssid_len != elems->ssid_len ||
+	     os_memcmp(bss->ssid, elems->ssid, bss->ssid_len) != 0)) {
 		wpa_printf(MSG_DEBUG, "Store SSID '%s' for BSSID " MACSTR,
 			   wpa_ssid_txt(elems->ssid, elems->ssid_len),
 			   MAC2STR(bss->bssid));
@@ -223,6 +226,11 @@ void bss_update(struct wlantest *wt, struct wlantest_bss *bss,
 	if (!update)
 		return;
 
+	if (beacon == 1)
+		bss->beacon_seen = 1;
+	else if (beacon == 2)
+		bss->proberesp_seen = 1;
+	bss->ies_set = 1;
 	bss->prev_capab_info = bss->capab_info;
 	bss->proto = 0;
 	bss->pairwise_cipher = 0;
@@ -282,7 +290,7 @@ void bss_update(struct wlantest *wt, struct wlantest_bss *bss,
 		   "group=%s%s%s%s%s%s%s%s%s"
 		   "mgmt_group_cipher=%s%s%s%s%s"
 		   "key_mgmt=%s%s%s%s%s%s%s%s%s"
-		   "rsn_capab=%s%s%s%s%s",
+		   "rsn_capab=%s%s%s%s%s%s%s",
 		   MAC2STR(bss->bssid),
 		   bss->proto == 0 ? "OPEN " : "",
 		   bss->proto & WPA_PROTO_WPA ? "WPA " : "",
@@ -332,7 +340,10 @@ void bss_update(struct wlantest *wt, struct wlantest_bss *bss,
 		   bss->rsn_capab & WPA_CAPABILITY_MFPR ? "MFPR " : "",
 		   bss->rsn_capab & WPA_CAPABILITY_MFPC ? "MFPC " : "",
 		   bss->rsn_capab & WPA_CAPABILITY_PEERKEY_ENABLED ?
-		   "PEERKEY " : "");
+		   "PEERKEY " : "",
+		   bss->rsn_capab & WPA_CAPABILITY_OCVC ? "OCVC " : "",
+		   bss->rsn_capab & WPA_CAPABILITY_EXT_KEY_ID_FOR_UNICAST ?
+		   "ExtKeyID " : "");
 }
 
 
