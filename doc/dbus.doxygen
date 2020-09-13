@@ -16,6 +16,7 @@ Interfaces:
 - \ref dbus_peer
 - \ref dbus_group
 - \ref dbus_persistent_group
+- \ref dbus_mesh
 
 
 \section dbus_main fi.w1.wpa_supplicant1
@@ -456,6 +457,24 @@ fi.w1.wpa_supplicant1.CreateInterface.
 	</dl>
       </li>
       <li>
+	<h3>TDLSChannelSwitch ( a{sv} : args ) --> nothing</h3>
+	<p>Configure TDLS channel switching behavior with a peer.</p>
+	<h4>Arguments</h4>
+	<dl>
+	  <dt>a{sv} : args</dt>
+	  <dd>A dictionary with arguments identifying the peer and channel switching behavior.</dd>
+	</dl>
+      </li>
+      <li>
+	<h3>TDLSCancelChannelSwitch ( s : peer_address ) --> nothing</h3>
+	<p>Disable channel switching for a TDLS session with a peer.</p>
+	<h4>Arguments</h4>
+	<dl>
+	  <dt>s : peer_address</dt>
+	  <dd>MAC address for the peer.</dd>
+	</dl>
+      </li>
+      <li>
 	<h3>VendorElemAdd ( i: frame_id, ay: ielems ) --> nothing</h3>
 	<p>Add Vendor Elements to corresponding frame ID.</p>
 	<h4>Arguments</h4>
@@ -510,6 +529,10 @@ fi.w1.wpa_supplicant1.CreateInterface.
       <li>
 	<h3>SaveConfig ( ) --> nothing</h3>
 	<p>Save configuration to the configuration file.</p>
+      </li>
+      <li>
+	<h3>AbortScan ( ) --> nothing</h3>
+	<p>Abort ongoing scan operation.</p>
       </li>
       <li>
 	<h3>EAPLogoff ( ) --> nothing</h3>
@@ -625,9 +648,10 @@ fi.w1.wpa_supplicant1.CreateInterface.
 	<p>Capabilities of the interface. Dictionary contains following entries:</p>
 	<table>
 	  <tr><th>Key</th><th>Value type</th><th>Description</th>
-	  <tr><td>Pairwise</td><td>as</td><td>Possible array elements: "ccmp", "tkip", "none"</td>
-	  <tr><td>Group</td><td>as</td><td>Possible array elements: "ccmp", "tkip", "wep104", "wep40"</td>
-	  <tr><td>KeyMgmt</td><td>as</td><td>Possible array elements: "wpa-psk", "wpa-ft-psk", "wpa-psk-sha256", "wpa-eap", "wpa-ft-eap", "wpa-eap-sha256", "ieee8021x", "wpa-none", "wps", "none"</td>
+	  <tr><td>Pairwise</td><td>as</td><td>Possible array elements: "ccmp-256", "gcmp-256", "ccmp", "gcmp", "tkip", "none"</td>
+	  <tr><td>Group</td><td>as</td><td>Possible array elements: "ccmp-256", "gcmp-256", "ccmp", "gcmp", "tkip", "wep104", "wep40"</td>
+	  <tr><td>GroupMgmt</td><td>as</td><td>Possible array elements: "aes-128-cmac", "bip-gmac-128", "bip-gmac-256", "bip-cmac-256"</td>
+	  <tr><td>KeyMgmt</td><td>as</td><td>Possible array elements: "wpa-psk", "wpa-ft-psk", "wpa-psk-sha256", "wpa-eap", "wpa-ft-eap", "wpa-eap-sha256", "sae", "ieee8021x", "wpa-none", "wps", "none"</td>
 	  <tr><td>Protocol</td><td>as</td><td>Possible array elements: "rsn", "wpa"</td>
 	  <tr><td>AuthAlg</td><td>as</td><td>Possible array elements: "open", "shared", "leap"</td>
 	  <tr><td>Scan</td><td>as</td><td>Possible array elements: "active", "passive", "ssid"</td>
@@ -711,6 +735,11 @@ fi.w1.wpa_supplicant1.CreateInterface.
       </li>
 
       <li>
+	<h3>Stations - ao - (read)</h3>
+	<p>List of D-Bus objects paths representing connected stations in AP mode.</p>
+      </li>
+
+      <li>
 	<h3>Networks - ao - (read)</h3>
 	<p>List of D-Bus objects paths representing configured networks.</p>
       </li>
@@ -741,8 +770,33 @@ fi.w1.wpa_supplicant1.CreateInterface.
       </li>
 
       <li>
+	<h3>AuthStatusCode - i - (read)</h3>
+	<p>The most recent IEEE 802.11 status code for authentication.</p>
+      </li>
+
+      <li>
 	<h3>AssocStatusCode - i - (read)</h3>
 	<p>The most recent IEEE 802.11 status code for association rejection.</p>
+      </li>
+
+      <li>
+	<h3>RoamTime - u - (read)</h3>
+	<p>The most recent roam time in milliseconds.</p>
+      </li>
+
+      <li>
+	<h3>RoamComplete - b - (read)</h3>
+	<p>The most recent roam success or failure.</p>
+      </li>
+
+      <li>
+	<h3>SessionLength - u - (read)</h3>
+	<p>The most recent BSS session length in milliseconds.</p>
+      </li>
+
+      <li>
+	<h3>BSSTMStatus - u - (read)</h3>
+	<p>The most recent BSS Transition Management status code.</p>
       </li>
 
       <li>
@@ -989,6 +1043,12 @@ fi.w1.wpa_supplicant1.CreateInterface.
 	<h3>WpsPriority - s - (read/write)</h3>
 	<p>Priority for the networks added through WPS</p>
       </li>
+
+      <li>
+	<h3>MACAddressRandomizationMask - a{say} - (read/write)</h3>
+	<p>Masks to show which bits not to randomize with MAC address randomization. Possible keys are "scan", "sched_scan", and "pno". Values must be an array of 6 bytes.</p>
+	<p>When this property is set, the new dictionary replaces the old value, rather than merging them together. Leaving a key out of the dictionary will turn off MAC address randomization for that scan type.</p>
+      </li>
     </ul>
 
 \subsection dbus_interface_signals Signals
@@ -1099,6 +1159,32 @@ fi.w1.wpa_supplicant1.CreateInterface.
 	<dl>
 	  <dt>s : mac</dt>
 	  <dd>A mac address which has been deauthorized.</dd>
+	</dl>
+      </li>
+
+      <li>
+	<h3>StationAdded ( o : Station, a{sv} : properties )</h3>
+	<p>A new station has been added to the interface.</p>
+	<p>This signal complements StaAuthorized, passing the Station object and its properties.</p>
+	<h4>Arguments</h4>
+	<dl>
+	  <dt>o : Station</dt>
+	  <dd>A D-Bus path to an object representing the new Station.</dd>
+	</dl>
+	<dl>
+	  <dt>a{sv} : properties</dt>
+	  <dd>A dictionary containing properties of added Station.</dd>
+	</dl>
+      </li>
+
+      <li>
+	<h3>StationRemoved ( o : Station )</h3>
+	<p>The station has been removed from the interface.</p>
+	<p>This signal complements StaDeauthorized, passing the Station object.</p>
+	<h4>Arguments</h4>
+	<dl>
+	  <dt>o : Station</dt>
+	  <dd>A D-Bus path to an object representing the Station.</dd>
 	</dl>
       </li>
 
@@ -1220,6 +1306,30 @@ Interface for performing WPS (Wi-Fi Simple Config) operations.
 	<h3>ConfigMethods - s - (read/write)</h3>
 	<p>The currently advertised WPS configuration methods. Available methods: usba ethernet label display ext_nfc_token int_nfc_token nfc_interface push_button keypad virtual_display physical_display virtual_push_button physical_push_button.</p>
       </li>
+      <li>
+	<h3>DeviceName - s - (read/write)</h3>
+	<p>User-friendly description of device; up to 32 octets encoded in UTF-8.</p>
+      </li>
+      <li>
+	<h3>Manufacturer - s - (read/write)</h3>
+	<p>The manufacturer of the device (up to 64 ASCII characters).</p>
+      </li>
+      <li>
+	<h3>ModelName - s - (read/write)</h3>
+	<p>Model of the device (up to 32 ASCII characters).</p>
+      </li>
+      <li>
+	<h3>ModelNumber - s - (read/write)</h3>
+	<p>Additional device description (up to 32 ASCII characters).</p>
+      </li>
+      <li>
+	<h3>SerialNumber - s - (read/write)</h3>
+	<p>Serial number of the device (up to 32 characters).</p>
+      </li>
+      <li>
+	<h3>DeviceType - ay - (read/write)</h3>
+	<p>Device Type (8 octet value with 2 octet category, 4 octet OUI, 2 octet subcategory.</p>
+      </li>
     </ul>
 
 \subsection dbus_wps_signals Signals
@@ -1297,6 +1407,7 @@ Interface for performing P2P (Wi-Fi Peer-to-Peer) P2P Device operations.
 	<tr><td>Timeout</td><td>i</td><td>Timeout for operating in seconds</td><td>no</td></tr>
 	<tr><td>RequestedDeviceTypes</td><td>aay</td><td>WPS Device Types to search for</td><td>no</td></tr>
 	<tr><td>DiscoveryType</td><td>s</td><td>"start_with_full" (default, if not specified), "social", "progressive"</td><td>no</td></tr>
+	<tr><td>freq</td><td>i</td><td>Initial scan channel (frequency in MHz) for the start_with_full case to limit the initial scan to the specified channel</td><td>no</td></tr>
 	</table>
       </dd>
     </dl>
@@ -1923,7 +2034,7 @@ scan results.
 	<h3>RSN - a{sv} - (read)</h3>
 	<p>RSN information of the BSS. Empty dictionary indicates no RSN support. Dictionary entries are:</p>
 	<table>
-	  <tr><td>KeyMgmt</td><td>as</td><td>Key management suite. Possible array elements: "wpa-psk", "wpa-eap", "wpa-ft-psk", "wpa-ft-eap", "wpa-psk-sha256", "wpa-eap-sha256",</td>
+	  <tr><td>KeyMgmt</td><td>as</td><td>Key management suite. Possible array elements: "wpa-psk", "wpa-ft-psk", "wpa-psk-sha256", "wpa-eap", "wpa-ft-eap", "wpa-eap-sha256", "wpa-eap-suite-b", "wpa-eap-suite-b-192", "wpa-fils-sha256", "wpa-fils-sha384", "wpa-ft-fils-sha256", "wpa-ft-fils-sha384", "sae", "ft-sae", "wpa-none"</td>
 	  <tr><td>Pairwise</td><td>as</td><td>Pairwise cipher suites. Possible array elements: "ccmp", "tkip"</td>
 	  <tr><td>Group</td><td>s</td><td>Group cipher suite. Possible values are: "ccmp", "tkip", "wep104", "wep40"</td>
 	  <tr><td>MgmtGroup</td><td>s</td><td>Mangement frames cipher suite. Possible values are: "aes128cmac"</td>
@@ -1996,7 +2107,7 @@ i.e., returned by fi.w1.wpa_supplicant1.Interface.AddNetwork.
 
       <li>
 	<h3>Properties - a{sv} - (read/write)</h3>
-	<p>Properties of the configured network. Dictionary contains entries from "network" block of wpa_supplicant configuration file. All values are string type, e.g., frequency is "2437", not 2437.
+	<p>Properties of the configured network. Dictionary contains entries from "network" block of wpa_supplicant configuration file. All values are string type, e.g., frequency is "2437", not 2437. When setting the properties, use the same format as for the AddNetwork() function.</p>
       </li>
     </ul>
 
@@ -2202,6 +2313,63 @@ Interface implemented by objects representing persistent P2P groups.
       <tr><td>disabled</td><td>s</td><td>Set to "2" to indicate special network block use as a P2P persistent group information</td></tr>
       <tr><td>mode</td><td>s</td><td>"3" on GO or "0" on P2P Client</td></tr>
     </table>
+  </li>
+</ul>
+
+\section dbus_mesh fi.w1.wpa_supplicant1.Interface.Mesh
+
+Interface for performing mesh operations.
+
+\subsection dbus_mesh_properties Properties
+
+<ul>
+  <li>
+    <h3>MeshPeers - aay - (read)</h3>
+  </li>
+
+  <li>
+    <h3>MeshGroup - ay - (read)</h3>
+  </li>
+</ul>
+
+\subsection dbus_mesh_signals Signals
+
+<ul>
+  <li>
+    <h3>MeshGroupStarted ( a{sv} : args )</h3>
+    <p></p>
+    <h4>Arguments</h4>
+    <dl>
+      <dt>a{sv} : args</dt>
+      <dd>A dictionary containing information of the started mesh group.</dd>
+    </dl>
+  </li>
+  <li>
+    <h3>MeshGroupRemoved ( a{sv} : args )</h3>
+    <p></p>
+    <h4>Arguments</h4>
+    <dl>
+      <dt>a{sv} : args</dt>
+      <dd>A dictionary containing information of the removed mesh group.</dd>
+    </dl>
+  </li>
+  <li>
+    <h3>MeshPeerConnected ( a{sv} : args )</h3>
+    <p></p>
+    <h4>Arguments</h4>
+    <dl>
+      <dt>a{sv} : args</dt>
+      <dd>A dictionary containing information of the connected mesh peer.</dd>
+    </dl>
+  </li>
+  <li>
+    <h3>MeshPeerDisconnected ( a{sv} : args )</h3>
+    <p></p>
+    <h4>Arguments</h4>
+    <dl>
+      <dt>a{sv} : args</dt>
+      <dd>A dictionary containing information of the disconnected mesh peer.</dd>
+    </dl>
   </li>
 </ul>
 

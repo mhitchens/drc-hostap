@@ -1,6 +1,6 @@
 /*
  * wlantest - IEEE 802.11 protocol monitoring and testing tool
- * Copyright (c) 2010-2013, Jouni Malinen <j@w1.fi>
+ * Copyright (c) 2010-2020, Jouni Malinen <j@w1.fi>
  *
  * This software may be distributed under the terms of the BSD license.
  * See README for more details.
@@ -35,7 +35,8 @@ struct wlantest_passphrase {
 
 struct wlantest_pmk {
 	struct dl_list list;
-	u8 pmk[32];
+	u8 pmk[PMK_LEN_MAX];
+	size_t pmk_len;
 };
 
 struct wlantest_ptk {
@@ -59,6 +60,8 @@ struct wlantest_sta {
 		STATE2 /* authenticated */,
 		STATE3 /* associated */
 	} state;
+	u16 auth_alg;
+	bool ft_over_ds;
 	u16 aid;
 	u8 rsnie[257]; /* WPA/RSN IE */
 	u8 osenie[257]; /* OSEN IE */
@@ -67,10 +70,17 @@ struct wlantest_sta {
 	int group_cipher;
 	int key_mgmt;
 	int rsn_capab;
-	u8 anonce[32]; /* ANonce from the previous EAPOL-Key msg 1/4 or 3/4 */
-	u8 snonce[32]; /* SNonce from the previous EAPOL-Key msg 2/4 */
+	/* ANonce from the previous EAPOL-Key msg 1/4 or 3/4 */
+	u8 anonce[WPA_NONCE_LEN];
+	/* SNonce from the previous EAPOL-Key msg 2/4 */
+	u8 snonce[WPA_NONCE_LEN];
+	u8 pmk_r0[PMK_LEN_MAX];
+	size_t pmk_r0_len;
+	u8 pmk_r0_name[WPA_PMK_NAME_LEN];
+	u8 pmk_r1[PMK_LEN_MAX];
+	size_t pmk_r1_len;
+	u8 pmk_r1_name[WPA_PMK_NAME_LEN];
 	struct wpa_ptk ptk; /* Derived PTK */
-	size_t tk_len;
 	int ptk_set;
 	struct wpa_ptk tptk; /* Derived PTK during rekeying */
 	int tptk_set;
@@ -79,6 +89,7 @@ struct wlantest_sta {
 	u8 ap_sa_query_tr[2];
 	u8 sta_sa_query_tr[2];
 	u32 counters[NUM_WLANTEST_STA_COUNTER];
+	int assocreq_seen;
 	u16 assocreq_capab_info;
 	u16 assocreq_listen_int;
 	u8 *assocreq_ies;
@@ -92,6 +103,7 @@ struct wlantest_sta {
 
 	le16 seq_ctrl_to_sta[17];
 	le16 seq_ctrl_to_ap[17];
+	int allow_duplicate;
 
 	int pwrmgt;
 	int pspoll;
@@ -128,7 +140,9 @@ struct wlantest_bss {
 	u16 prev_capab_info;
 	u8 ssid[32];
 	size_t ssid_len;
+	int beacon_seen;
 	int proberesp_seen;
+	int ies_set;
 	int parse_error_reported;
 	u8 wpaie[257];
 	u8 rsnie[257];
@@ -145,13 +159,14 @@ struct wlantest_bss {
 	size_t gtk_len[4];
 	int gtk_idx;
 	u8 rsc[4][6];
-	u8 igtk[6][32];
-	size_t igtk_len[6];
+	u8 igtk[8][32];
+	size_t igtk_len[8];
 	int igtk_idx;
-	u8 ipn[6][6];
+	u8 ipn[8][6];
+	int bigtk_idx;
 	u32 counters[NUM_WLANTEST_BSS_COUNTER];
 	struct dl_list tdls; /* struct wlantest_tdls */
-	u8 mdid[2];
+	u8 mdid[MOBILITY_DOMAIN_ID_LEN];
 	u8 r0kh_id[FT_R0KH_ID_MAX_LEN];
 	size_t r0kh_id_len;
 	u8 r1kh_id[FT_R1KH_ID_LEN];
@@ -187,6 +202,7 @@ struct wlantest {
 	unsigned int rx_ctrl;
 	unsigned int rx_data;
 	unsigned int fcs_error;
+	unsigned int frame_num;
 
 	void *write_pcap; /* pcap_t* */
 	void *write_pcap_dumper; /* pcpa_dumper_t */
@@ -203,6 +219,7 @@ struct wlantest {
 
 	unsigned int assume_fcs:1;
 	unsigned int pcap_no_buffer:1;
+	unsigned int ethernet:1;
 
 	char *notes[MAX_NOTES];
 	size_t num_notes;
@@ -237,14 +254,14 @@ void wlantest_process(struct wlantest *wt, const u8 *data, size_t len);
 void wlantest_process_prism(struct wlantest *wt, const u8 *data, size_t len);
 void wlantest_process_80211(struct wlantest *wt, const u8 *data, size_t len);
 void wlantest_process_wired(struct wlantest *wt, const u8 *data, size_t len);
-u32 crc32(const u8 *frame, size_t frame_len);
 int monitor_init(struct wlantest *wt, const char *ifname);
 int monitor_init_wired(struct wlantest *wt, const char *ifname);
 void monitor_deinit(struct wlantest *wt);
 void rx_mgmt(struct wlantest *wt, const u8 *data, size_t len);
 void rx_mgmt_ack(struct wlantest *wt, const struct ieee80211_hdr *hdr);
 void rx_data(struct wlantest *wt, const u8 *data, size_t len);
-void rx_data_eapol(struct wlantest *wt, const u8 *dst, const u8 *src,
+void rx_data_eapol(struct wlantest *wt, const u8 *bssid, const u8 *sta_addr,
+		   const u8 *dst, const u8 *src,
 		   const u8 *data, size_t len, int prot);
 void rx_data_ip(struct wlantest *wt, const u8 *bssid, const u8 *sta_addr,
 		const u8 *dst, const u8 *src, const u8 *data, size_t len,
@@ -257,7 +274,7 @@ struct wlantest_bss * bss_find(struct wlantest *wt, const u8 *bssid);
 struct wlantest_bss * bss_get(struct wlantest *wt, const u8 *bssid);
 void bss_deinit(struct wlantest_bss *bss);
 void bss_update(struct wlantest *wt, struct wlantest_bss *bss,
-		struct ieee802_11_elems *elems);
+		struct ieee802_11_elems *elems, int beacon);
 void bss_flush(struct wlantest *wt);
 int bss_add_pmk_from_passphrase(struct wlantest_bss *bss,
 				const char *passphrase);

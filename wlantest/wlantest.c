@@ -1,6 +1,6 @@
 /*
  * wlantest - IEEE 802.11 protocol monitoring and testing tool
- * Copyright (c) 2010-2015, Jouni Malinen <j@w1.fi>
+ * Copyright (c) 2010-2019, Jouni Malinen <j@w1.fi>
  *
  * This software may be distributed under the terms of the BSD license.
  * See README for more details.
@@ -21,7 +21,7 @@ static void wlantest_terminate(int sig, void *signal_ctx)
 
 static void usage(void)
 {
-	printf("wlantest [-cddhqqFNt] [-i<ifname>] [-r<pcap file>] "
+	printf("wlantest [-cddehqqFNt] [-i<ifname>] [-r<pcap file>] "
 	       "[-p<passphrase>]\n"
 	       "         [-I<wired ifname>] [-R<wired pcap file>] "
 	       "[-P<RADIUS shared secret>]\n"
@@ -146,7 +146,8 @@ static void add_secret(struct wlantest *wt, const char *secret)
 static int add_pmk_file(struct wlantest *wt, const char *pmk_file)
 {
 	FILE *f;
-	u8 pmk[32];
+	u8 pmk[PMK_LEN_MAX];
+	size_t pmk_len;
 	char buf[300], *pos;
 	struct wlantest_pmk *p;
 
@@ -163,14 +164,30 @@ static int add_pmk_file(struct wlantest *wt, const char *pmk_file)
 		*pos = '\0';
 		if (pos - buf < 2 * 32)
 			continue;
-		if (hexstr2bin(buf, pmk, 32) < 0)
+		pmk_len = (pos - buf) / 2;
+		if (pmk_len > PMK_LEN_MAX)
+			pmk_len = PMK_LEN_MAX;
+		if (hexstr2bin(buf, pmk, pmk_len) < 0)
 			continue;
 		p = os_zalloc(sizeof(*p));
 		if (p == NULL)
 			break;
-		os_memcpy(p->pmk, pmk, 32);
+		os_memcpy(p->pmk, pmk, pmk_len);
+		p->pmk_len = pmk_len;
 		dl_list_add(&wt->pmk, &p->list);
-		wpa_hexdump(MSG_DEBUG, "Added PMK from file", pmk, 32);
+		wpa_hexdump(MSG_DEBUG, "Added PMK from file", pmk, pmk_len);
+
+		/* For FT, the send half of MSK is used */
+		if (hexstr2bin(&buf[2 * PMK_LEN], pmk, PMK_LEN) < 0)
+			continue;
+		p = os_zalloc(sizeof(*p));
+		if (p == NULL)
+			break;
+		os_memcpy(p->pmk, pmk, PMK_LEN);
+		p->pmk_len = PMK_LEN;
+		dl_list_add(&wt->pmk, &p->list);
+		wpa_hexdump(MSG_DEBUG, "Added PMK from file (2nd half of MSK)",
+			    pmk, PMK_LEN);
 	}
 
 	fclose(f);
@@ -350,7 +367,7 @@ int main(int argc, char *argv[])
 	wlantest_init(&wt);
 
 	for (;;) {
-		c = getopt(argc, argv, "cdf:Fhi:I:L:n:Np:P:qr:R:tT:w:W:");
+		c = getopt(argc, argv, "cdef:Fhi:I:L:n:Np:P:qr:R:tT:w:W:");
 		if (c < 0)
 			break;
 		switch (c) {
@@ -360,6 +377,9 @@ int main(int argc, char *argv[])
 		case 'd':
 			if (wpa_debug_level > 0)
 				wpa_debug_level--;
+			break;
+		case 'e':
+			wt.ethernet = 1;
 			break;
 		case 'f':
 			if (add_pmk_file(&wt, optarg) < 0)
